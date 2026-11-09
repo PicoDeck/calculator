@@ -1,8 +1,9 @@
 {
-  "id": "net.picodeck.calculator",
-  "name": "Calculator",
-  "description": "Scientific calculator with expression evaluation",
-  "version": "0.1.0",
-  "author": "PicoDeck",
-  "category": "tools"
+    "id": "net.picodeck.calculator",
+    "name": "Calculator",
+    "description": "Scientific calculator with expression evaluation",
+    "version": "0.1.1",
+    "author": "PicoDeck",
+    "category": "tools",
+    "min_firmware": "0.7.0"
 }
