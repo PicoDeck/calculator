@@ -38,8 +38,9 @@ highlighted button, like Enter, and F5 saves and quits, like Esc.
 
 ## Install
 
-From the **App Store** on the device (firmware 0.7.0 or later), or copy the
-files listed in `files.txt` to `/apps/calculator/` on the SD card.
+From the **App Store** on the device, or copy the
+files listed in `files.txt` to `/apps/calculator/` on the SD card. Both need
+PicoDeck firmware 0.7.0 or later.
 
 ## Development
 
