@@ -7,6 +7,7 @@ local input = pc.input
 local ui = pc.ui
 local fs = pc.fs
 local sys = pc.sys
+local gp = pc.gamepad
 
 -- ── Load modules ────────────────────────────────────────────────────────────
 
@@ -692,15 +693,63 @@ local function handle_char_input(ch)
     return false
 end
 
-local function handle_input(pressed)
-    -- ESC exits history overlay or app
-    if pressed & input.BTN_ESC ~= 0 then
-        if show_history then
+local function handle_input(pressed, nav)
+    -- History overlay: the D-pad scrolls, A recalls, B (or Esc) closes it
+    if show_history then
+        if nav & gp.PAD_B ~= 0 then
             show_history = false
             history_scroll = 0
-            return true
+        elseif nav & gp.PAD_UP ~= 0 then
+            history_scroll = history_scroll + 1
+        elseif nav & gp.PAD_DOWN ~= 0 then
+            if history_scroll > 0 then history_scroll = history_scroll - 1 end
+        elseif nav & gp.PAD_A ~= 0 then
+            -- Recall the most recent visible entry
+            local history = memory:get_history()
+            if #history > 0 then
+                local idx = #history - history_scroll
+                if idx >= 1 and idx <= #history then
+                    expression = tostring(history[idx].result)
+                end
+            end
+            show_history = false
+            history_scroll = 0
         end
-        -- ESC in graph fullscreen: return to input mode
+        return true
+    end
+
+    -- Keyboard-only commands first: F1 angle, F2 2nd layer, F3 history,
+    -- Backspace and Delete edit the expression. With the default bindings F2
+    -- and F3 are also L and R, so a frame with one of these keys does its
+    -- command alone and never also steps a tab.
+    if pressed & input.BTN_F1 ~= 0 then
+        if angle_mode == "deg" then angle_mode = "rad"
+        elseif angle_mode == "rad" then angle_mode = "grad"
+        else angle_mode = "deg" end
+        return true
+    end
+    if pressed & input.BTN_F2 ~= 0 then
+        shift_active = not shift_active
+        rebuild_grid()
+        return true
+    end
+    if pressed & input.BTN_F3 ~= 0 then
+        show_history = not show_history
+        history_scroll = 0
+        return true
+    end
+    if pressed & input.BTN_BACKSPACE ~= 0 then
+        execute_action("cmd:bs")
+        return true
+    end
+    if pressed & input.BTN_DEL ~= 0 then
+        execute_action("cmd:ce")
+        return true
+    end
+
+    -- B or Esc: leave the graph view, or save the history and exit
+    if nav & gp.PAD_B ~= 0 then
+        -- In graph fullscreen: return to input mode
         if active_tab == 3 and UIGraph.is_fullscreen() then
             UIGraph.handle_action("cmd:graph_input", expression)
             expression = UIGraph.get_active_expression()
@@ -718,111 +767,58 @@ local function handle_input(pressed)
         return false  -- signal exit
     end
 
-    -- History overlay navigation
-    if show_history then
-        if pressed & input.BTN_UP ~= 0 then
-            history_scroll = history_scroll + 1
-        elseif pressed & input.BTN_DOWN ~= 0 then
-            if history_scroll > 0 then history_scroll = history_scroll - 1 end
-        elseif pressed & input.BTN_ENTER ~= 0 then
-            -- Recall the most recent visible entry
-            local history = memory:get_history()
-            if #history > 0 then
-                local idx = #history - history_scroll
-                if idx >= 1 and idx <= #history then
-                    expression = tostring(history[idx].result)
-                end
-            end
-            show_history = false
-            history_scroll = 0
-        end
-        return true
-    end
-
-    -- F1: cycle angle mode
-    if pressed & input.BTN_F1 ~= 0 then
-        if angle_mode == "deg" then angle_mode = "rad"
-        elseif angle_mode == "rad" then angle_mode = "grad"
-        else angle_mode = "deg" end
-        return true
-    end
-
-    -- F2: toggle 2nd function layer (Sci tab only)
-    if pressed & input.BTN_F2 ~= 0 then
-        shift_active = not shift_active
-        rebuild_grid()
-        return true
-    end
-
-    -- F3: toggle history
-    if pressed & input.BTN_F3 ~= 0 then
-        show_history = not show_history
-        history_scroll = 0
-        return true
-    end
-
-    -- Tab switching: F4/F5 or Shift+Left/Right
-    if pressed & input.BTN_F4 ~= 0 then
+    -- L / R: previous / next tab
+    if nav & (gp.PAD_L | gp.PAD_R) ~= 0 then
         -- Save expression state when leaving special tabs
         if active_tab == 3 then UIGraph.set_active_expression(expression) end
         if active_tab == 4 then UISolve.set_active_expression(expression) end
-        active_tab = active_tab - 1
-        if active_tab < 1 then active_tab = #tab_names end
+        if nav & gp.PAD_L ~= 0 then
+            active_tab = active_tab - 1
+            if active_tab < 1 then active_tab = #tab_names end
+        else
+            active_tab = active_tab + 1
+            if active_tab > #tab_names then active_tab = 1 end
+        end
         -- Load expression state when entering special tabs
         if active_tab == 3 then expression = UIGraph.get_active_expression() end
         if active_tab == 4 then expression = UISolve.get_active_expression() end
         rebuild_grid()
         return true
     end
-    if pressed & input.BTN_F5 ~= 0 then
-        if active_tab == 3 then UIGraph.set_active_expression(expression) end
-        if active_tab == 4 then UISolve.set_active_expression(expression) end
-        active_tab = active_tab + 1
-        if active_tab > #tab_names then active_tab = 1 end
-        if active_tab == 3 then expression = UIGraph.get_active_expression() end
-        if active_tab == 4 then expression = UISolve.get_active_expression() end
-        rebuild_grid()
-        return true
-    end
 
-    -- Graph fullscreen mode: intercept arrow keys, enter
+    -- Graph fullscreen mode: the D-pad and A drive the graph view
     if active_tab == 3 and UIGraph.is_fullscreen() then
-        -- The keyboard's arrows and Enter have the D-pad's and A's PAD_* values
-        if UIGraph.handle_view_input(pressed, expression) then
+        if UIGraph.handle_view_input(nav, expression) then
             return true
         end
-        -- ESC exits graph fullscreen back to input
-        if pressed & input.BTN_ENTER ~= 0 then
-            -- Already handled by handle_view_input
-        end
     end
 
-    -- Arrow key grid navigation
-    if pressed & input.BTN_UP ~= 0 then
+    -- D-pad grid navigation (a held direction repeats)
+    if nav & gp.PAD_UP ~= 0 then
         grid_row = grid_row - 1
         if grid_row < 1 then grid_row = #grid_buttons end
         if grid_col > #grid_buttons[grid_row] then grid_col = #grid_buttons[grid_row] end
         return true
     end
-    if pressed & input.BTN_DOWN ~= 0 then
+    if nav & gp.PAD_DOWN ~= 0 then
         grid_row = grid_row + 1
         if grid_row > #grid_buttons then grid_row = 1 end
         if grid_col > #grid_buttons[grid_row] then grid_col = #grid_buttons[grid_row] end
         return true
     end
-    if pressed & input.BTN_LEFT ~= 0 then
+    if nav & gp.PAD_LEFT ~= 0 then
         grid_col = grid_col - 1
         if grid_col < 1 then grid_col = #grid_buttons[grid_row] end
         return true
     end
-    if pressed & input.BTN_RIGHT ~= 0 then
+    if nav & gp.PAD_RIGHT ~= 0 then
         grid_col = grid_col + 1
         if grid_col > #grid_buttons[grid_row] then grid_col = 1 end
         return true
     end
 
-    -- Enter = activate focused grid button
-    if pressed & input.BTN_ENTER ~= 0 then
+    -- A (or Enter) = activate focused grid button
+    if nav & gp.PAD_A ~= 0 then
         local row = grid_buttons[grid_row]
         if row then
             local btn = row[grid_col]
@@ -830,18 +826,6 @@ local function handle_input(pressed)
                 execute_action(btn[2])
             end
         end
-        return true
-    end
-
-    -- Backspace
-    if pressed & input.BTN_BACKSPACE ~= 0 then
-        execute_action("cmd:bs")
-        return true
-    end
-
-    -- DEL = clear expression
-    if pressed & input.BTN_DEL ~= 0 then
-        execute_action("cmd:ce")
         return true
     end
 
@@ -874,7 +858,8 @@ local last_draw_ms = 0
 
 while true do
     input.update()
-    local pressed = input.getButtonsPressed()
+    local pressed = input.getButtonsPressed()  -- the keyboard's own keys (F1-F3, Backspace, Del)
+    local nav = gp.getNavPressed()              -- D-pad, A, B, L, R: keys, rebound keys or a controller
 
     -- Character input (physical keyboard)
     local ch = input.getChar()
@@ -884,8 +869,8 @@ while true do
     end
 
     -- Button input
-    if pressed ~= 0 then
-        local cont = handle_input(pressed)
+    if pressed ~= 0 or nav ~= 0 then
+        local cont = handle_input(pressed, nav)
         if not cont then return end  -- exit app
         needs_draw = true
     end
