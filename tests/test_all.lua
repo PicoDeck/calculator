@@ -11,5 +11,6 @@ require("test_calc_stats")
 require("test_calc_complex")
 require("test_calc_solver")
 require("test_calc_graph")
+require("test_ui_graph")
 
 os.exit(lu.LuaUnit.run())

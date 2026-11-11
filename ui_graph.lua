@@ -4,6 +4,12 @@
 
 local Graph = require("calc_graph")
 
+local gp = picocalc.gamepad
+
+-- The key bound to a gamepad button, for the hints below (read at draw time:
+-- Settings > Controls can rebind the gamepad while the app runs).
+local function pad_key(btn) return gp.getLabel(btn) or "?" end
+
 local UIGraph = {}
 
 -- PicoDeck Lua numbers are single-precision floats (~7 significant digits).
@@ -143,36 +149,36 @@ function UIGraph.handle_action(action, expression)
     return false
 end
 
---- Handle view/trace/table mode input (arrow keys, etc.).
--- pressed = button bitmask, input = picocalc.input module
--- Returns true if handled.
-function UIGraph.handle_view_input(pressed, input, expression)
+--- Handle view/trace/table mode input from the gamepad.
+-- nav = picocalc.gamepad.getNavPressed() (the D-pad, repeating while held,
+-- and A; B and L/R are main.lua's). Returns true if handled.
+function UIGraph.handle_view_input(nav, expression)
     if mode == "view" then
-        if pressed & input.BTN_LEFT ~= 0 then
+        if nav & gp.PAD_LEFT ~= 0 then
             graph:pan(-0.1, 0)
             return true
-        elseif pressed & input.BTN_RIGHT ~= 0 then
+        elseif nav & gp.PAD_RIGHT ~= 0 then
             graph:pan(0.1, 0)
             return true
-        elseif pressed & input.BTN_UP ~= 0 then
+        elseif nav & gp.PAD_UP ~= 0 then
             graph:pan(0, 0.1)
             return true
-        elseif pressed & input.BTN_DOWN ~= 0 then
+        elseif nav & gp.PAD_DOWN ~= 0 then
             graph:pan(0, -0.1)
             return true
-        elseif pressed & input.BTN_ENTER ~= 0 then
+        elseif nav & gp.PAD_A ~= 0 then
             mode = "trace"
             trace_px = math.floor(PLOT_W / 2)
             return true
         end
     elseif mode == "trace" then
-        if pressed & input.BTN_LEFT ~= 0 then
+        if nav & gp.PAD_LEFT ~= 0 then
             trace_px = math.max(0, trace_px - 1)
             return true
-        elseif pressed & input.BTN_RIGHT ~= 0 then
+        elseif nav & gp.PAD_RIGHT ~= 0 then
             trace_px = math.min(PLOT_W - 1, trace_px + 1)
             return true
-        elseif pressed & input.BTN_UP ~= 0 then
+        elseif nav & gp.PAD_UP ~= 0 then
             -- Cycle to next active slot
             for i = 1, 4 do
                 local s = ((trace_slot - 1 + i) % 4) + 1
@@ -182,7 +188,7 @@ function UIGraph.handle_view_input(pressed, input, expression)
                 end
             end
             return true
-        elseif pressed & input.BTN_DOWN ~= 0 then
+        elseif nav & gp.PAD_DOWN ~= 0 then
             for i = 1, 4 do
                 local s = ((trace_slot - 1 - i) % 4) + 1
                 if graph.expressions[s] ~= "" then
@@ -191,26 +197,26 @@ function UIGraph.handle_view_input(pressed, input, expression)
                 end
             end
             return true
-        elseif pressed & input.BTN_ENTER ~= 0 then
+        elseif nav & gp.PAD_A ~= 0 then
             mode = "view"
             return true
         end
     elseif mode == "table" then
-        if pressed & input.BTN_UP ~= 0 then
+        if nav & gp.PAD_UP ~= 0 then
             table_scroll = table_scroll - 1
             return true
-        elseif pressed & input.BTN_DOWN ~= 0 then
+        elseif nav & gp.PAD_DOWN ~= 0 then
             table_scroll = table_scroll + 1
             return true
-        elseif pressed & input.BTN_LEFT ~= 0 then
+        elseif nav & gp.PAD_LEFT ~= 0 then
             table_step = table_step / 2
             if table_step < 0.001 then table_step = 0.001 end
             return true
-        elseif pressed & input.BTN_RIGHT ~= 0 then
+        elseif nav & gp.PAD_RIGHT ~= 0 then
             table_step = table_step * 2
             if table_step > 100 then table_step = 100 end
             return true
-        elseif pressed & input.BTN_ENTER ~= 0 then
+        elseif nav & gp.PAD_A ~= 0 then
             mode = "view"
             return true
         end
@@ -390,7 +396,7 @@ function UIGraph.draw_view(disp, engine)
         vp.xmin, vp.xmax, vp.ymin, vp.ymax)
     disp.drawText(4, 282, info, disp.rgb(120, 130, 150), disp.rgb(10, 12, 20))
 
-    local help = "Arrows:pan +/-:zoom R:reset I:input T:table Enter:trace"
+    local help = "Arrows:pan +/-:zoom R:reset I:input T:table " .. pad_key(gp.PAD_A) .. ":trace"
     disp.drawText(4, 294, help, disp.rgb(80, 90, 110), disp.rgb(10, 12, 20))
 
     graph.dirty = false
@@ -429,7 +435,9 @@ function UIGraph.draw_trace(disp, engine)
     local y_str = y_val and string.format(SIG_FMT, y_val) or "undef"
     local info = string.format("y%d: x=" .. SIG_FMT .. "  y=%s", trace_slot, x_val, y_str)
     disp.drawText(4, 282, info, FUNC_COLORS[trace_slot], disp.rgb(10, 12, 20))
-    disp.drawText(4, 294, "L/R:move U/D:switch func Enter/Esc:back", disp.rgb(80, 90, 110), disp.rgb(10, 12, 20))
+    local help = string.format("%s/%s:move %s/%s:func %s/Esc:back", pad_key(gp.PAD_LEFT),
+        pad_key(gp.PAD_RIGHT), pad_key(gp.PAD_UP), pad_key(gp.PAD_DOWN), pad_key(gp.PAD_A))
+    disp.drawText(4, 294, help, disp.rgb(80, 90, 110), disp.rgb(10, 12, 20))
 end
 
 ---------------------------------------------------------------------------
@@ -489,7 +497,9 @@ function UIGraph.draw_table(disp, engine)
     disp.setFont(0)
     disp.drawText(4, 282, string.format("Start:%.4g  Step:%.4g", table_start + table_scroll * table_step, table_step),
         disp.rgb(120, 130, 150), disp.rgb(10, 12, 20))
-    disp.drawText(4, 294, "U/D:scroll L/R:step Enter/Esc:back", disp.rgb(80, 90, 110), disp.rgb(10, 12, 20))
+    local help = string.format("%s/%s:scroll %s/%s:step %s/Esc:back", pad_key(gp.PAD_UP),
+        pad_key(gp.PAD_DOWN), pad_key(gp.PAD_LEFT), pad_key(gp.PAD_RIGHT), pad_key(gp.PAD_A))
+    disp.drawText(4, 294, help, disp.rgb(80, 90, 110), disp.rgb(10, 12, 20))
 end
 
 ---------------------------------------------------------------------------

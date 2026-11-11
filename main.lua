@@ -787,7 +787,8 @@ local function handle_input(pressed)
 
     -- Graph fullscreen mode: intercept arrow keys, enter
     if active_tab == 3 and UIGraph.is_fullscreen() then
-        if UIGraph.handle_view_input(pressed, input, expression) then
+        -- The keyboard's arrows and Enter have the D-pad's and A's PAD_* values
+        if UIGraph.handle_view_input(pressed, expression) then
             return true
         end
         -- ESC exits graph fullscreen back to input
