@@ -184,3 +184,63 @@ def test_calculator_graph_view_on_the_pad(simulator):
     _see(sim, seq, tab="Graph", info="", hint="")
     _press(sim, "b")                    # saves and exits
     _exited(sim)
+
+
+def test_calculator_typed_letter_does_not_also_press_its_pad_button(simulator):
+    """A letter typed on the keyboard is only text, even when a pad button is
+    bound to that key: with Right on D, typing hex "d" in Base must not also
+    move the cursor."""
+    sim = simulator
+    seq = _launch(sim, rebind={"right": ["D"]})
+    _press(sim, "l")                    # Basic -> Base (wraps)
+    _see(sim, seq, tab="Base")
+    _tap(sim, "d")                      # hex D
+    _see(sim, seq, tab="Base", expr="D")
+    _press(sim, "down")
+    _press(sim, "down")                 # row 3: col 1 is "7", col 2 is "8"
+    seq = _mark(sim)
+    _press(sim, "a")
+    _see(sim, seq, tab="Base", expr="D7")
+    _press(sim, "b")
+    _exited(sim)
+
+
+def test_calculator_esc_closes_then_quits(simulator):
+    """Esc is B's key too: it closes the history overlay, leaves the
+    full-screen graph, and on the grid saves the history and quits."""
+    sim = simulator
+    seq = _launch(sim)
+    _tap(sim, "7")
+    _tap(sim, "=")
+    _see(sim, seq, expr="7", res="= 7")
+    _tap(sim, "f3")
+    _tap(sim, "esc")                    # closes the overlay, does not quit
+    seq = _mark(sim)
+    _press(sim, "a")                    # the grid answers: "(" at row 1, col 1
+    _see(sim, seq, expr="7(")
+    _press(sim, "r")
+    _press(sim, "r")                    # Graph
+    _press(sim, "left")                 # row 1 wraps to col 6: "View"
+    seq = _mark(sim)
+    _press(sim, "a")
+    _see(sim, seq, tab="Graph", info="x:[-10,10] y:[-10,10]")
+    seq = _mark(sim)
+    _tap(sim, "esc")                    # back to the input grid
+    _see(sim, seq, tab="Graph", info="", hint="")
+    _tap(sim, "esc")                    # saves and quits
+    _exited(sim)
+    assert '"expr":"7"' in _history(sim), _history(sim)
+
+
+def test_calculator_shift_f2_f3_step_the_tabs(simulator):
+    """Shift+F3 and Shift+F2 reach the app as F8 and F7; the gamepad reads
+    them as R and L."""
+    sim = simulator
+    seq = _launch(sim)
+    _tap(sim, "f8")
+    _see(sim, seq, tab="Sci")
+    seq = _mark(sim)
+    _tap(sim, "f7")
+    _see(sim, seq, tab="Basic")
+    _press(sim, "b")
+    _exited(sim)

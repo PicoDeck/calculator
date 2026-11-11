@@ -852,6 +852,8 @@ load_history()
 -- and any OS overlay, which a redraw once a second keeps up to date. In between
 -- the app sleeps: redrawing and flushing flat out would hold the CPU and the
 -- panel's bus at full power while it waits for a key.
+local NAV_BITS = {gp.PAD_UP, gp.PAD_DOWN, gp.PAD_LEFT, gp.PAD_RIGHT,
+    gp.PAD_A, gp.PAD_B, gp.PAD_L, gp.PAD_R}
 local IDLE_REDRAW_MS = 1000
 local needs_draw = true
 local last_draw_ms = 0
@@ -864,7 +866,17 @@ while true do
     -- Character input (physical keyboard)
     local ch = input.getChar()
     if ch then
-        handle_char_input(ch)
+        -- A typed letter is text only: drop the pad buttons bound to that
+        -- key, or hex "d" would also move a cursor that D is bound to.
+        -- Enter and digits keep acting as before (Enter is also A).
+        if handle_char_input(ch) and ch:match("^%a$") then
+            local letter = ch:upper()
+            for _, bit in ipairs(NAV_BITS) do
+                if gp.getLabel(bit, 0) == letter or gp.getLabel(bit, 1) == letter then
+                    nav = nav & ~bit
+                end
+            end
+        end
         needs_draw = true
     end
 
